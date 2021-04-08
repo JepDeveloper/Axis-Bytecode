@@ -1,0 +1,191 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
+using System.Net;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+
+namespace RobloxHacksAPI
+{
+	// Token: 0x02000002 RID: 2
+	public class Module
+	{
+		// Token: 0x06000001 RID: 1
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr OpenProcess(uint dwDesiredAccess, int bInheritHandle, uint dwProcessId);
+
+		// Token: 0x06000002 RID: 2
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern int CloseHandle(IntPtr hObject);
+
+		// Token: 0x06000003 RID: 3
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+
+		// Token: 0x06000004 RID: 4
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+		// Token: 0x06000005 RID: 5
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, IntPtr dwSize, uint flAllocationType, uint flProtect);
+
+		// Token: 0x06000006 RID: 6
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern int WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] buffer, uint size, int lpNumberOfBytesWritten);
+
+		// Token: 0x06000007 RID: 7
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttribute, IntPtr dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
+
+		// Token: 0x06000008 RID: 8 RVA: 0x00002050 File Offset: 0x00000250
+		public bool DoesDLLExist()
+		{
+			return File.Exists("RobloxHacksDLL.dll");
+		}
+
+		// Token: 0x06000009 RID: 9 RVA: 0x0000206C File Offset: 0x0000026C
+		public bool InjectDLL()
+		{
+			bool flag = !this.DoesDLLExist();
+			if (flag)
+			{
+				new WebClient
+				{
+					Proxy = new WebProxy()
+				}.DownloadFile("https://github.com/ZexeaDeveloper/RobloxHacksDLL/raw/main/RobloxHacksDLL.dll", "RobloxHacksDLL.dll");
+			}
+			string text = Directory.GetCurrentDirectory() + "\\RobloxHacksDLL.dll";
+			IntPtr intPtr = (IntPtr)null;
+			IntPtr intPtr2 = Module.OpenProcess(1082u, 1, (uint)Process.GetProcessesByName("RobloxPlayerBeta")[0].Id);
+			IntPtr procAddress = Module.GetProcAddress(Module.GetModuleHandle("kernel32.dll"), "LoadLibraryA");
+			IntPtr intPtr3 = Module.VirtualAllocEx(intPtr2, intPtr, (IntPtr)text.Length, 12288u, 64u);
+			bool flag2 = intPtr2 == IntPtr.Zero || procAddress == IntPtr.Zero || intPtr3 == IntPtr.Zero;
+			bool result;
+			if (flag2)
+			{
+				result = false;
+			}
+			else
+			{
+				bool flag3 = Module.WriteProcessMemory(intPtr2, intPtr3, Encoding.ASCII.GetBytes(text), (uint)Encoding.ASCII.GetBytes(text).Length, 0) == 0 || Module.CreateRemoteThread(intPtr2, intPtr, (IntPtr)0, procAddress, intPtr3, 0u, intPtr) == IntPtr.Zero;
+				if (flag3)
+				{
+					result = false;
+				}
+				else
+				{
+					Module.CloseHandle(intPtr2);
+					result = true;
+				}
+			}
+			return result;
+		}
+
+		// Token: 0x0600000A RID: 10 RVA: 0x000021A0 File Offset: 0x000003A0
+		public void Execute(string script)
+		{
+			bool flag = Module.NamedPipeExist();
+			if (flag)
+			{
+				Module.ExecuteScript(script);
+			}
+			else
+			{
+				bool flag2 = !Module.NamedPipeExist();
+				if (flag2)
+				{
+					this.InjectDLL();
+					Module.ExecuteScript(script);
+				}
+			}
+		}
+
+		// Token: 0x0600000B RID: 11 RVA: 0x000021E0 File Offset: 0x000003E0
+		private static void ExecuteScript(string script)
+		{
+			new Thread(delegate ()
+			{
+				try
+				{
+					using (NamedPipeClientStream namedPipeClientStream = new NamedPipeClientStream(".", "RobloxHacks", PipeDirection.Out))
+					{
+						namedPipeClientStream.Connect();
+						using (StreamWriter streamWriter = new StreamWriter(namedPipeClientStream, Encoding.Default, 999999))
+						{
+							streamWriter.Write(script);
+							streamWriter.Dispose();
+						}
+						namedPipeClientStream.Dispose();
+					}
+				}
+				catch (IOException)
+				{
+				}
+				catch (Exception)
+				{
+				}
+			}).Start();
+		}
+
+		// Token: 0x0600000C RID: 12
+		[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool WaitNamedPipe(string name, int timeout);
+
+		// Token: 0x0600000D RID: 13 RVA: 0x00002214 File Offset: 0x00000414
+		public static bool NamedPipeExist()
+		{
+			bool result;
+			try
+			{
+				bool flag = !Module.WaitNamedPipe("\\\\.\\pipe\\RobloxHacks", 0);
+				bool flag2 = flag;
+				if (flag2)
+				{
+					int lastWin32Error = Marshal.GetLastWin32Error();
+					bool flag3 = lastWin32Error == 0;
+					bool flag4 = flag3;
+					if (flag4)
+					{
+						return false;
+					}
+					bool flag5 = lastWin32Error == 2;
+					bool flag6 = flag5;
+					if (flag6)
+					{
+						return false;
+					}
+				}
+				result = true;
+			}
+			catch (Exception)
+			{
+				result = false;
+			}
+			return result;
+		}
+
+		// Token: 0x0600000E RID: 14 RVA: 0x0000228C File Offset: 0x0000048C
+		public void KillRoblox()
+		{
+			foreach (Process process in Process.GetProcesses())
+			{
+				bool flag = process.ProcessName == "RobloxPlayerBeta";
+				bool flag2 = flag;
+				if (flag2)
+				{
+					try
+					{
+						process.Kill();
+					}
+					catch
+					{
+					}
+				}
+			}
+		}
+	}
+}
